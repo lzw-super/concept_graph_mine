@@ -24,5 +24,20 @@
             "--cachedir", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/sg_cache",
             "--mapfile", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/pcd_saves/full_pcd_ram_withbg_allclasses_overlap_maskconf0.25_simsum1.2_dbscan.1_post.pkl.gz"]
         },
+        {    
+            "name": "debug gsa",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+            "--box_threshold", "0.4",
+            "--text_threshold", "0.4",
+            "--stride", "5",
+            "--add_bg_classes",
+            "--accumu_classes",
+            "--exp_suffix", "withbg_allclasses",
+            "--use_slow_vis"]
+        },
     ]
 }

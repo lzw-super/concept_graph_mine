@@ -20,6 +20,7 @@ import cv2
 
 import numpy as np
 import matplotlib
+matplotlib.use('Agg')  # 必须在 pyplot 导入前设置！
 import matplotlib.pyplot as plt
 import torch
 import open3d as o3d
@@ -343,7 +344,7 @@ def vis_result_slow_caption(image, masks, boxes_filt, pred_phrases, caption, tex
     该函数虽然处理速度较慢，但输出更清晰可读，支持添加标题和提示文本。
     
     参数:
-        image: 输入图像
+        image: 输入图像 (np.ndarray, HxWx3)
         masks: 分割掩码列表
         boxes_filt: 过滤后的边界框
         pred_phrases: 预测的文本短语
@@ -351,14 +352,15 @@ def vis_result_slow_caption(image, masks, boxes_filt, pred_phrases, caption, tex
         text_prompt: 文本提示
         
     返回:
-        np.ndarray: 标注后的图像数组
+        np.ndarray: 标注后的 RGB 图像数组 (HxWx3, uint8)
     """
-    # 创建图形
     plt.figure(figsize=(10, 10))
     plt.imshow(image)
+    
     # 显示所有掩码
     for mask in masks:
         show_mask(mask, plt.gca(), random_color=True)
+    
     # 显示所有边界框和标签
     for box, label in zip(boxes_filt, pred_phrases):
         show_box(box, plt.gca(), label)
@@ -367,16 +369,23 @@ def vis_result_slow_caption(image, masks, boxes_filt, pred_phrases, caption, tex
     plt.title('Tagging-Caption: ' + caption + '\n' + 'Tagging-classes: ' + text_prompt + '\n')
     plt.axis('off')
     
-    # 将图形转换为numpy数组
+    # 获取当前图形并调整布局
     fig = plt.gcf()
     fig.tight_layout(pad=0)
     fig.canvas.draw()
-    vis_image = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    vis_image = vis_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    plt.close()  # 关闭图形以释放内存
+
+    # === 关键修复：替换 tostring_rgb() ===
+    # 新版 Matplotlib 使用 buffer_rgba()
+    buf = fig.canvas.buffer_rgba()
+    w, h = fig.canvas.get_width_height()
+    vis_image = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)  # RGBA
+    
+    # 转为 RGB（丢弃 Alpha 通道）
+    vis_image = vis_image[:, :, :3]  # 取 R, G, B 三通道
+    
+    plt.close()  # 释放内存
     
     return vis_image
-
 def vis_sam_mask(anns):
     """
     可视化SAM模型生成的分割掩码

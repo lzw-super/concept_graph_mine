@@ -15,8 +15,8 @@ import cv2
 import json
 import imageio
 import matplotlib
-matplotlib.use("TkAgg")  # 设置matplotlib后端为TkAgg
-from matplotlib import pyplot as plt
+matplotlib.use('Agg')  # 必须在 pyplot 导入前设置！
+import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import gzip
@@ -42,13 +42,13 @@ except ImportError as e:
     print("Import Error: Please install Grounded Segment Anything following the instructions in README.")
     raise e
 
-# 设置脚本中使用的路径
-# 假设所有检查点文件都已按照原始GSA仓库的说明下载
-if "GSA_PATH" in os.environ:
-    GSA_PATH = os.environ["GSA_PATH"]  # 从环境变量获取GSA路径
-else:
-    raise ValueError("Please set the GSA_PATH environment variable to the path of the GSA repo. ")
-    
+# # 设置脚本中使用的路径
+# # 假设所有检查点文件都已按照原始GSA仓库的说明下载
+# if "GSA_PATH" in os.environ:
+#     GSA_PATH = os.environ["GSA_PATH"]  # 从环境变量获取GSA路径
+# else:
+#     raise ValueError("Please set the GSA_PATH environment variable to the path of the GSA repo. ")
+GSA_PATH = '/home/zhengwu/Desktop/concept-graphs/Grounded-Segment-Anything'
 import sys
 TAG2TEXT_PATH = os.path.join(GSA_PATH, "")  # Tag2Text模块路径
 EFFICIENTSAM_PATH = os.path.join(GSA_PATH, "EfficientSAM")  # EfficientSAM模块路径
@@ -99,11 +99,11 @@ def get_parser() -> argparse.ArgumentParser:
     """""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dataset_root", type=Path, required=True,
+        "--dataset_root", type=Path,default='yourdataset',
         help="数据集根目录路径"
     )
     parser.add_argument(
-        "--dataset_config", type=str, required=True,
+        "--dataset_config", type=str, default="yourdataconfig",
         help="数据集配置文件路径（可能需要根据运行脚本的位置进行更改）"
     )
     
@@ -230,7 +230,7 @@ def get_sam_predictor(variant: str, device: str | int) -> SamPredictor:
 # 使用SAM进行密集分割（不使用检测框提示）
 def get_sam_segmentation_dense(
     variant: str, model: Any, image: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """""
     使用SAM基于自动掩码生成进行密集分割，无需检测框提示
     
@@ -291,10 +291,10 @@ from ultralytics import YOLO  # 用于FastSAM
 
 # 定义模型配置路径
 SAM_ENCODER_VERSION = "vit_h"  # SAM编码器版本
-SAM_CHECKPOINT_PATH = os.path.join(os.getenv("GSA_PATH"), "sam_vit_h_4b8939.pth")
-FASTSAM_CHECKPOINT_PATH = os.path.join(os.getenv("GSA_PATH"), "EfficientSAM/FastSAM-x.pt")
-MOBILESAM_CHECKPOINT_PATH = os.path.join(os.getenv("GSA_PATH"), "EfficientSAM/mobile_sam.pt")
-LIGHTHQSAM_CHECKPOINT_PATH = os.path.join(os.getenv("GSA_PATH"), "sam_hq_vit_tiny.pth")
+SAM_CHECKPOINT_PATH = os.path.join(GSA_PATH, "sam_vit_h_4b8939.pth")
+FASTSAM_CHECKPOINT_PATH = os.path.join(GSA_PATH, "FastSAM-x.pt")
+MOBILESAM_CHECKPOINT_PATH = os.path.join(GSA_PATH, "mobile_sam.pt")
+LIGHTHQSAM_CHECKPOINT_PATH = os.path.join(GSA_PATH, "sam_hq_vit_tiny.pth")
 
 # 获取SAM掩码生成器
 def get_sam_mask_generator(variant: str, device: str | int) -> SamAutomaticMaskGenerator:
@@ -590,7 +590,8 @@ def main(args: argparse.Namespace):
                 caption=res[2]
 
             # 将标签分隔符从' |' 替换为 ','
-            text_prompt=res[0].replace(' |', ',')
+            text_prompt=res[0].replace(' |', ',') 
+            print(f'第{idx+1}张图出现的类: {text_prompt}')
             
             # 添加"other item"以捕获不在tag2text描述中的对象
             # 移除"xxx room"等，否则会包含整个图像
@@ -756,5 +757,11 @@ def main(args: argparse.Namespace):
 # 程序入口
 if __name__ == "__main__":
     parser = get_parser()
-    args = parser.parse_args()
+    args = parser.parse_args() 
+    args.dataset_root = Path('/home/zhengwu/Desktop/concept-graphs/Datasets/Replica' )
+    args.dataset_config = '/home/zhengwu/Desktop/concept-graphs/conceptgraph/dataset/dataconfigs/replica/replica.yaml'
+    args.scene_id = 'room0' 
+    args.class_set = 'ram'
+    args.sam_variant = 'mobilesam'
+
     main(args)

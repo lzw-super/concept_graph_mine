@@ -1,23 +1,27 @@
 import argparse
 import os
-import copy
+import sys
 
 import numpy as np
 import json
 import torch
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
+
+sys.path.append(os.path.join(os.getcwd(), "GroundingDINO"))
+sys.path.append(os.path.join(os.getcwd(), "segment_anything"))
+
 
 # Grounding DINO
 import GroundingDINO.groundingdino.datasets.transforms as T
 from GroundingDINO.groundingdino.models import build_model
-from GroundingDINO.groundingdino.util import box_ops
 from GroundingDINO.groundingdino.util.slconfig import SLConfig
 from GroundingDINO.groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 
+
 # segment anything
 from segment_anything import (
-    build_sam,
-    build_sam_hq,
+    sam_model_registry,
+    sam_hq_model_registry,
     SamPredictor
 )
 import cv2
@@ -40,9 +44,10 @@ def load_image(image_path):
     return image_pil, image
 
 
-def load_model(model_config_path, model_checkpoint_path, device):
+def load_model(model_config_path, model_checkpoint_path, bert_base_uncased_path, device):
     args = SLConfig.fromfile(model_config_path)
     args.device = device
+    args.bert_base_uncased_path = bert_base_uncased_path
     model = build_model(args)
     checkpoint = torch.load(model_checkpoint_path, map_location="cpu")
     load_res = model.load_state_dict(clean_state_dict(checkpoint["model"]), strict=False)
@@ -99,7 +104,7 @@ def show_mask(mask, ax, random_color=False):
 def show_box(box, ax, label):
     x0, y0 = box[0], box[1]
     w, h = box[2] - box[0], box[3] - box[1]
-    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2)) 
+    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))
     ax.text(x0, y0, label)
 
 
@@ -130,7 +135,7 @@ def save_mask_data(output_dir, mask_list, box_list, label_list):
         })
     with open(os.path.join(output_dir, 'mask.json'), 'w') as f:
         json.dump(json_data, f)
-    
+
 
 if __name__ == "__main__":
 
@@ -138,6 +143,9 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, required=True, help="path to config file")
     parser.add_argument(
         "--grounded_checkpoint", type=str, required=True, help="path to checkpoint file"
+    )
+    parser.add_argument(
+        "--sam_version", type=str, default="vit_h", required=False, help="SAM ViT version: vit_b / vit_l / vit_h"
     )
     parser.add_argument(
         "--sam_checkpoint", type=str, required=False, help="path to sam checkpoint file"
@@ -158,11 +166,13 @@ if __name__ == "__main__":
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
 
     parser.add_argument("--device", type=str, default="cpu", help="running on cpu only!, default=False")
+    parser.add_argument("--bert_base_uncased_path", type=str, required=False, help="bert_base_uncased model path, default=False")
     args = parser.parse_args()
 
     # cfg
     config_file = args.config  # change the path of the model config file
     grounded_checkpoint = args.grounded_checkpoint  # change the path of the model
+    sam_version = args.sam_version
     sam_checkpoint = args.sam_checkpoint
     sam_hq_checkpoint = args.sam_hq_checkpoint
     use_sam_hq = args.use_sam_hq
@@ -172,13 +182,14 @@ if __name__ == "__main__":
     box_threshold = args.box_threshold
     text_threshold = args.text_threshold
     device = args.device
+    bert_base_uncased_path = args.bert_base_uncased_path
 
     # make dir
     os.makedirs(output_dir, exist_ok=True)
     # load image
     image_pil, image = load_image(image_path)
     # load model
-    model = load_model(config_file, grounded_checkpoint, device=device)
+    model = load_model(config_file, grounded_checkpoint, bert_base_uncased_path, device=device)
 
     # visualize raw image
     image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
@@ -190,9 +201,9 @@ if __name__ == "__main__":
 
     # initialize SAM
     if use_sam_hq:
-        predictor = SamPredictor(build_sam_hq(checkpoint=sam_hq_checkpoint).to(device))
+        predictor = SamPredictor(sam_hq_model_registry[sam_version](checkpoint=sam_hq_checkpoint).to(device))
     else:
-        predictor = SamPredictor(build_sam(checkpoint=sam_checkpoint).to(device))
+        predictor = SamPredictor(sam_model_registry[sam_version](checkpoint=sam_checkpoint).to(device))
     image = cv2.imread(image_path)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     predictor.set_image(image)
@@ -213,7 +224,7 @@ if __name__ == "__main__":
         boxes = transformed_boxes.to(device),
         multimask_output = False,
     )
-    
+
     # draw output image
     plt.figure(figsize=(10, 10))
     plt.imshow(image)
@@ -224,9 +235,8 @@ if __name__ == "__main__":
 
     plt.axis('off')
     plt.savefig(
-        os.path.join(output_dir, "grounded_sam_output.jpg"), 
+        os.path.join(output_dir, "grounded_sam_output.jpg"),
         bbox_inches="tight", dpi=300, pad_inches=0.0
     )
 
     save_mask_data(output_dir, masks, boxes_filt, pred_phrases)
-
