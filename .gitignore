@@ -1,0 +1,12 @@
+Datasets/
+LLaVA/
+llava_v1.6_vicuna/
+LaVA-7B-v0/
+*.pt
+*.pth 
+.history/
+conceptgraph/scenegraph/build_see/ 
+# *.mp3
+# *.png
+# *.jpg
+# *.wav

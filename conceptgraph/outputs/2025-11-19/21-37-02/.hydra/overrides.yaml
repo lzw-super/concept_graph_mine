@@ -1,0 +1,14 @@
+- dataset_root=/home/zhengwu/Desktop/concept-graphs/Datasets/Replica
+- dataset_config=/home/zhengwu/Desktop/concept-graphs//conceptgraph/dataset/dataconfigs/replica/replica.yaml
+- stride=5
+- scene_id=room0
+- spatial_sim_type=overlap
+- mask_conf_threshold=0.25
+- match_method=sim_sum
+- sim_threshold=1.2
+- dbscan_eps=0.1
+- gsa_variant=ram_withbg_allclasses
+- skip_bg=False
+- max_bbox_area_ratio=0.5
+- save_suffix=overlap_maskconf0.25_simsum1.2_dbscan.1
+- save_objects_all_frames=True

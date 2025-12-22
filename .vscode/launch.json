@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [  
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+            "--input_folder", "$REPLICA_ROOT/$SCENE_NAME/objects_all_frames/none_overlap_maskconf0.95_simsum1.2_dbscan.1_merge20_masksub"]
+        },
+        {    
+            "name": "debug build-scenegraph",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+            "--mode", "extract-node-captions",
+            "--cachedir", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/sg_cache",
+            "--mapfile", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/pcd_saves/full_pcd_ram_withbg_allclasses_overlap_maskconf0.25_simsum1.2_dbscan.1_post.pkl.gz"]
+        },
+    ]
+}

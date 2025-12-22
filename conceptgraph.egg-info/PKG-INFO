@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: conceptgraph
+Version: 1.0.0
+Summary: ConceptGraphs: Open-Vocabulary 3D Scene Graphs for Perception and Planning
+Author: See https://concept-graphs.github.io/
+License-File: LICENSE
+Dynamic: author
+Dynamic: license-file
+Dynamic: summary
