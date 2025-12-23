@@ -80,13 +80,33 @@
     // merge_text_sim_thresh=0.8\
     // save_objects_all_frames=True
         {    
-            "name": "debug build-scenegraph",
+            "name": "debug build-scenegraph -extract-node-captions",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-            "--mode", "extract-node-captions",   //extract-node-captions refine-node-captions   build-scenegraph
+            "--mode", "extract-node-captions",   //extract-node-captions   refine-node-captions   build-scenegraph
+            "--cachedir", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/sg_cache",
+            "--mapfile", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/pcd_saves/full_pcd_ram_withbg_allclasses_overlap_maskconf0.25_simsum1.2_dbscan.1_post.pkl.gz"]
+        },        {    
+            "name": "debug build-scenegraph -refine-node-captions",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+            "--mode", "refine-node-captions",   //extract-node-captions   refine-node-captions   build-scenegraph
+            "--cachedir", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/sg_cache",
+            "--mapfile", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/pcd_saves/full_pcd_ram_withbg_allclasses_overlap_maskconf0.25_simsum1.2_dbscan.1_post.pkl.gz"]
+        },        {    
+            "name": "debug build-scenegraph -build-scenegraph",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+            "--mode", "build-scenegraph",   //extract-node-captions   refine-node-captions   build-scenegraph
             "--cachedir", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/sg_cache",
             "--mapfile", "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/pcd_saves/full_pcd_ram_withbg_allclasses_overlap_maskconf0.25_simsum1.2_dbscan.1_post.pkl.gz"]
         },

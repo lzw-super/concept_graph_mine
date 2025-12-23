@@ -6,6 +6,8 @@ LaVA-7B-v0/
 *.pth 
 .history/
 conceptgraph/scenegraph/build_see/ 
+*.bin
+
 # *.mp3
 # *.png
 # *.jpg

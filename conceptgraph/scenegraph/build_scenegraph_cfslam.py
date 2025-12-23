@@ -40,7 +40,7 @@ from scipy.sparse import csr_matrix  # 稀疏矩阵库
 from scipy.sparse.csgraph import connected_components, minimum_spanning_tree  # 图算法库
 from tqdm import tqdm, trange  # 进度条显示库
 from transformers import logging as hf_logging  # Hugging Face日志控制
-
+import shutil  # 文件操作模块
 # 禁用PyTorch梯度计算，节省内存
 # 注释掉的导入，可能是之前使用但现在不再使用的映射工具
 # from mappingutils import (
@@ -58,15 +58,15 @@ hf_logging.set_verbosity_error()  # 设置Hugging Face日志级别为错误
 # 导入OpenAI API
 from openai import OpenAI
 
-# # 从环境变量获取OpenAI API密钥和基础URL
-# API_KEY = os.getenv("OPENAI_API_KEY") 
-# BASE_URL = os.getenv("OPENAI_API_BASE")
+# 从环境变量获取OpenAI API密钥和基础URL
+API_KEY = os.getenv("OPENAI_API_KEY") 
+BASE_URL = os.getenv("OPENAI_API_BASE")
 
-# # 初始化OpenAI客户端
-# client = OpenAI(
-#     api_key=API_KEY,
-#     base_url=BASE_URL
-# )
+# 初始化OpenAI客户端
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=BASE_URL
+)
  
 # 定义程序参数的数据类
 @dataclass
@@ -146,6 +146,40 @@ def load_scene_map(args, scene_map):
         print(f"Loaded {len(scene_map)} objects")
 
 
+def clear_folder(folder_path):
+    """
+    检测并清空指定文件夹中的所有内容（保留文件夹本身）
+    """
+    # 1. 检查路径是否存在
+    if not os.path.exists(folder_path):
+        print(f"文件夹 '{folder_path}' 不存在，无需清理")
+        return
+
+    # 2. 确保是有效文件夹
+    if not os.path.isdir(folder_path):
+        print(f"错误: '{folder_path}' 不是有效的文件夹路径")
+        return
+
+    # 3. 遍历并删除内容
+    has_content = False
+    for item in os.listdir(folder_path):
+        has_content = True
+        item_path = os.path.join(folder_path, item)
+        try:
+            if os.path.isfile(item_path) or os.path.islink(item_path):
+                os.remove(item_path)
+                print(f"已删除文件: {item_path}")
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+                print(f"已删除文件夹: {item_path}")
+        except Exception as e:
+            print(f"删除 {item_path} 时出错: {e}")
+
+    # 4. 输出结果
+    if not has_content:
+        print(f"文件夹 '{folder_path}' 为空，无需删除内容")
+    else:
+        print(f"已成功清空文件夹 '{folder_path}' 中的所有内容")
 
 def crop_image_pil(image: Image, x1: int, y1: int, x2: int, y2: int, padding: int = 0) -> Image:
     """
@@ -410,11 +444,13 @@ def extract_node_captions(args):
                 )  #更丰富 
 
     # 创建保存特征和描述的目录
-    savedir_feat = Path(args.cachedir) / "cfslam_feat_llava"  # 特征保存目录
+    savedir_feat = Path(args.cachedir) / "cfslam_feat_llava"  # 特征保存目录 
+    clear_folder(savedir_feat)
     savedir_feat.mkdir(exist_ok=True, parents=True)  # 创建目录（如果不存在）
     savedir_captions = Path(args.cachedir) / "cfslam_captions_llava"  # 描述保存目录
     savedir_captions.mkdir(exist_ok=True, parents=True)
-    savedir_debug = Path(args.cachedir) / "cfslam_captions_llava_debug"  # 调试图像保存目录
+    savedir_debug = Path(args.cachedir) / "cfslam_captions_llava_debug"  # 调试图像保存目录 
+    clear_folder(savedir_debug)
     savedir_debug.mkdir(exist_ok=True, parents=True)
 
     # 存储所有对象描述的列表
@@ -422,12 +458,14 @@ def extract_node_captions(args):
     build_out = '/home/zhengwu/Desktop/concept-graphs/conceptgraph/scenegraph/build_see' 
     if not os.path.exists(build_out):
         os.makedirs(build_out, exist_ok=True)
+    clear_folder(build_out)
     # 遍历场景地图中的每个对象
     for idx_obj, obj in tqdm(enumerate(scene_map), total=len(scene_map)): 
         class_name_list = []
         build_out_idx = os.path.join(build_out, f'{idx_obj:04d}')
         if not os.path.exists(build_out_idx):
             os.makedirs(build_out_idx, exist_ok=True)
+        clear_folder(build_out_idx)
         conf = obj["conf"]  # 获取检测置信度列表
         conf = np.array(conf)
         # 按置信度降序排列索引
@@ -618,7 +656,8 @@ def refine_node_captions(args):
 
     TIMEOUT = 15000  # Timeout in seconds
 
-    responses_savedir = Path(args.cachedir) / "cfslam_gpt-4_responses"
+    responses_savedir = Path(args.cachedir) / "cfslam_gpt-4_responses" 
+    clear_folder(responses_savedir)
     responses_savedir.mkdir(exist_ok=True, parents=True)
 
     responses = []
