@@ -105,7 +105,9 @@ class ProgramArgs:
     annot_inds: Union[List[int], None] = None
 
     # 掩码选项：涂黑、红色轮廓或无
-    masking_option: Literal["blackout", "red_outline", "none"] = "none"
+    masking_option: Literal["blackout", "red_outline", "none"] = "none" 
+    # 是否使用原始prompt  默认使用原始prompt
+    use_raw_prompt: bool = True
 
 def load_scene_map(args, scene_map):
     """
@@ -398,11 +400,14 @@ def extract_node_captions(args):
     #     "与附近物体或表面的关系（如在桌面上、靠着墙、悬挂在钩子上等）。"
     #     "输出为简洁自然语言，不要包含多余前后缀。"
     # )
-    query = ("Please describe the central object in the image as thoroughly as possible:Include color, shape, material, and approximate size."
-            "Surface texture, visible components and structure, possible purpose/function, current state (e.g., open/closed, full/empty, damaged/intact)."
-            "Relationship to nearby objects or surfaces (e.g., on a table, against a wall, hanging from a hook)."
-            "Output in concise, natural language without unnecessary prefixes or suffixes."
-            )
+    if args.use_raw_prompt:
+        query = "Describe the central object in the image."
+    else : 
+        query = ("Please describe the central object in the image as thoroughly as possible:Include color, shape, material, and approximate size."
+                "Surface texture, visible components and structure, possible purpose/function, current state (e.g., open/closed, full/empty, damaged/intact)."
+                "Relationship to nearby objects or surfaces (e.g., on a table, against a wall, hanging from a hook)."
+                "Output in concise, natural language without unnecessary prefixes or suffixes."
+                )  #更丰富 
 
     # 创建保存特征和描述的目录
     savedir_feat = Path(args.cachedir) / "cfslam_feat_llava"  # 特征保存目录
@@ -414,9 +419,14 @@ def extract_node_captions(args):
 
     # 存储所有对象描述的列表
     caption_dict_list = [] 
-    
+    build_out = '/home/zhengwu/Desktop/concept-graphs/conceptgraph/scenegraph/build_see' 
+    if not os.path.exists(build_out):
+        os.makedirs(build_out, exist_ok=True)
     # 遍历场景地图中的每个对象
-    for idx_obj, obj in tqdm(enumerate(scene_map), total=len(scene_map)):
+    for idx_obj, obj in tqdm(enumerate(scene_map), total=len(scene_map)): 
+        build_out_idx = os.path.join(build_out, f'{idx_obj:04d}')
+        if not os.path.exists(build_out_idx):
+            os.makedirs(build_out_idx, exist_ok=True)
         conf = obj["conf"]  # 获取检测置信度列表
         conf = np.array(conf)
         # 按置信度降序排列索引
@@ -450,7 +460,8 @@ def extract_node_captions(args):
             # 打开并转换为RGB图像
             image = Image.open(obj["color_path"][idx_det]).convert("RGB")
             xyxy = obj["xyxy"][idx_det]  # 获取边界框坐标
-            class_id = obj["class_id"][idx_det]  # 获取类别ID
+            class_id = obj["class_id"][idx_det]  # 获取类别ID 
+            class_name = obj["class_name"][idx_det]  # 获取类别名称
             mask = obj["mask"][idx_det]  # 获取对象掩码
             
             # 裁剪参数设置
@@ -459,7 +470,7 @@ def extract_node_captions(args):
             
             # 裁剪图像和掩码
             image_crop, mask_crop = crop_image_and_mask(image, mask, x1, y1, x2, y2, padding=padding)
-            image_crop.show()
+            # image_crop.show()
             
             # 根据masking_option参数选择不同的图像预处理方式
             if args.masking_option == "blackout":
@@ -480,7 +491,8 @@ def extract_node_captions(args):
                 continue
             else:
                 low_confidences.append(False)
-
+            image_crop_path = os.path.join(build_out_idx, f'{class_name}_{idx_det:04d}.jpg')
+            image_crop.save(image_crop_path)
             
             # if getattr(chat, "is_mistral", False):
             #     chat.reset()
@@ -505,7 +517,10 @@ def extract_node_captions(args):
             image_tensor = chat.preprocess_image([image_crop_modified]).to("cuda", dtype=torch.float16)
             outputs = chat(query=query, image_features=image_tensor, image_sizes=image_sizes).replace("<s>", "").replace("</s>", "").strip() 
             # console.print("[bold green]LLaVA:[/bold green] " + outputs) 
-            
+            #去除冗余返回信息
+            text = "The central object in the image is "
+            if text in outputs:
+                outputs = outputs.replace(text, "")
             captions.append(outputs)
         
             # 为调试保存相关信息
@@ -533,13 +548,13 @@ def extract_node_captions(args):
         if len(image_list) > 0:
             plot_images_with_captions(image_list, caption_list, confidences_list, low_confidences_list, mask_list, savedir_debug, idx_obj)
     
-    # 处理生成的描述，移除不必要的前缀
-    for item in caption_dict_list:
-        for idx_lzw, caption in enumerate(item["captions"]):
-            # 移除常见的冗余前缀
-            text = "The central object in the image is "
-            if text in caption:
-                item["captions"][idx_lzw] = caption.replace(text, "")
+    # # 处理生成的描述，移除不必要的前缀
+    # for item in caption_dict_list:
+    #     for idx_lzw, caption in enumerate(item["captions"]):
+    #         # 移除常见的冗余前缀
+    #         text = "The central object in the image is "
+    #         if text in caption:
+    #             item["captions"][idx_lzw] = caption.replace(text, "")
                 
     # 保存处理后的描述到JSON文件
     with open(Path(args.cachedir) / "cfslam_llava_captions.json", "w", encoding="utf-8") as f:
@@ -571,8 +586,11 @@ def refine_node_captions(args):
     6. 记录处理成功和失败的响应数量
     """
     # NOTE: args.mapfile is in cfslam format
-    from conceptgraph.slam.slam_classes import MapObjectList
-    from conceptgraph.scenegraph.GPTPrompt import GPTPrompt
+    from conceptgraph.slam.slam_classes import MapObjectList 
+    if args.use_raw_prompt:
+        from conceptgraph.scenegraph.GPTPrompt_raw import GPTPrompt
+    else:
+        from conceptgraph.scenegraph.GPTPrompt_more import GPTPrompt
 
     # 加载每个分割对象的描述
     caption_file = Path(args.cachedir) / "cfslam_llava_captions.json"
@@ -932,77 +950,118 @@ def build_scenegraph(args):
                     # 获取边界框
                     _bbox1 = scene_map[segmentidx1]["bbox"]
                     _bbox2 = scene_map[segmentidx2]["bbox"]
-
-                    # 构建输入字典
-                    resp1 = scene_map[segmentidx1]["caption_dict"]["response"]
-                    resp2 = scene_map[segmentidx2]["caption_dict"]["response"]
-                    input_dict = {
-                        "object1": {
-                            "id": segmentidx1,
-                            "bbox_extent": np.round(_bbox1.extent, 1).tolist(),
-                            "bbox_center": np.round(_bbox1.center, 1).tolist(),
-                            "object_tag": object_tags[segmentidx1],
-                            "summary": resp1.get("summary", ""),
-                            "object_attitude": resp1.get("object_attitude", ""),
-                            "possible_tags": resp1.get("possible_tags", []),
-                            "possible_attitude": resp1.get("possible_attitude", []),
-                        },
-                        "object2": {
-                            "id": segmentidx2,
-                            "bbox_extent": np.round(_bbox2.extent, 1).tolist(),
-                            "bbox_center": np.round(_bbox2.center, 1).tolist(),
-                            "object_tag": object_tags[segmentidx2],
-                            "summary": resp2.get("summary", ""),
-                            "object_attitude": resp2.get("object_attitude", ""),
-                            "possible_tags": resp2.get("possible_tags", []),
-                            "possible_attitude": resp2.get("possible_attitude", []),
-                        },
-                    }
-                    
-                    print(f"{input_dict['object1']['object_tag']}, {input_dict['object2']['object_tag']}")
+                    if args.use_raw_prompt:
+                        # 构建查询字典，包含两个对象的所有必要信息
+                        # 这些信息将作为LLM推理关系的输入
+                        input_dict = {
+                            "object1": {
+                                "id": segmentidx1,
+                                "bbox_extent": np.round(_bbox1.extent, 1).tolist(),  # 边界框尺寸（长宽高）
+                                "bbox_center": np.round(_bbox1.center, 1).tolist(),  # 边界框中心坐标
+                                "object_tag": object_tags[segmentidx1],  # 对象的文本标签
+                            },
+                            "object2": {
+                                "id": segmentidx2,
+                                "bbox_extent": np.round(_bbox2.extent, 1).tolist(),  # 同样四舍五入到一位小数
+                                "bbox_center": np.round(_bbox2.center, 1).tolist(),
+                                "object_tag": object_tags[segmentidx2],
+                            },
+                        }
+                        
+                        # 打印正在处理的对象对，用于调试和进度跟踪
+                        print(f"{input_dict['object1']['object_tag']}, {input_dict['object2']['object_tag']}")
+                    else : 
+                        # 构建输入字典
+                        resp1 = scene_map[segmentidx1]["caption_dict"]["response"]
+                        resp2 = scene_map[segmentidx2]["caption_dict"]["response"]
+                        input_dict = {
+                            "object1": {
+                                "id": segmentidx1,
+                                "bbox_extent": np.round(_bbox1.extent, 1).tolist(),
+                                "bbox_center": np.round(_bbox1.center, 1).tolist(),
+                                "object_tag": object_tags[segmentidx1],
+                                "summary": resp1.get("summary", ""),
+                                "object_attitude": resp1.get("object_attitude", ""),
+                                "possible_tags": resp1.get("possible_tags", []),
+                                "possible_attitude": resp1.get("possible_attitude", []),
+                            },
+                            "object2": {
+                                "id": segmentidx2,
+                                "bbox_extent": np.round(_bbox2.extent, 1).tolist(),
+                                "bbox_center": np.round(_bbox2.center, 1).tolist(),
+                                "object_tag": object_tags[segmentidx2],
+                                "summary": resp2.get("summary", ""),
+                                "object_attitude": resp2.get("object_attitude", ""),
+                                "possible_tags": resp2.get("possible_tags", []),
+                                "possible_attitude": resp2.get("possible_attitude", []),
+                            },
+                        }
+                        
+                        print(f"{input_dict['object1']['object_tag']}, {input_dict['object2']['object_tag']}")
 
                     relation_queries.append(input_dict)
 
                     # 转换为JSON字符串
                     input_json_str = json.dumps(input_dict)
+                    if args.use_raw_prompt:
+                        DEFAULT_PROMPT = """
+                        The input is a list of JSONs describing two objects "object1" and "object2". You need to produce a JSON
+                        string (and nothing else), with two keys: "object_relation", and "reason".
 
+                        Each of the JSON fields "object1" and "object2" will have the following fields:
+                        1. bbox_extent: the 3D bounding box extents of the object
+                        2. bbox_center: the 3D bounding box center of the object
+                        3. object_tag: an extremely brief description of the object
+
+                        Produce an "object_relation" field that best describes the relationship between the two objects. The
+                        "object_relation" field must be one of the following (verbatim):
+                        1. "a on b": if object a is an object commonly placed on top of object b
+                        2. "b on a": if object b is an object commonly placed on top of object a
+                        3. "a in b": if object a is an object commonly placed inside object b
+                        4. "b in a": if object b is an object commonly placed inside object a
+                        5. "none of these": if none of the above best describe the relationship between the two objects
+
+                        Before producing the "object_relation" field, produce a "reason" field that explains why
+                        the chosen "object_relation" field is the best.
+                        """
+                    else:
                     # 定义提示词模板
-                    DEFAULT_PROMPT = """
-                    输入是一段JSON，其中包含两个对象"object1"与"object2"的关键信息：
-                    - bbox_extent: 该对象的三维包围盒尺寸
-                    - bbox_center: 该对象的三维包围盒中心
-                    - object_tag: 对该对象的简短标签
-                    - summary/object_attitude/possible_tags/possible_attitude: 来自上一步语义总结的描述与属性
+                        DEFAULT_PROMPT = """
+                        输入是一段JSON，其中包含两个对象"object1"与"object2"的关键信息：
+                        - bbox_extent: 该对象的三维包围盒尺寸
+                        - bbox_center: 该对象的三维包围盒中心
+                        - object_tag: 对该对象的简短标签
+                        - summary/object_attitude/possible_tags/possible_attitude: 来自上一步语义总结的描述与属性
 
-                    请仅输出一个JSON字符串（不要输出任何其他文本），包含两个键："object_relation"与"reason"。
+                        请仅输出一个JSON字符串（不要输出任何其他文本），包含两个键："object_relation"与"reason"。
 
-                    任务：基于三维空间位置(bbox_center与bbox_extent)以及对象语义(summary、object_tag、object_attitude)，判断两者之间最合理的关系。
-                    可选关系（严格按如下原文之一）：
-                    - "a on b" / "b on a"
-                    - "a in b" / "b in a"
-                    - "a above b" / "b above a"
-                    - "a below b" / "b below a"
-                    - "a left of b" / "b left of a"
-                    - "a right of b" / "b right of a"
-                    - "a in front of b" / "b in front of a"
-                    - "a behind b" / "b behind a"
-                    - "a near b" / "b near a"
-                    - "a overlapping b" / "b overlapping a"（包围盒有明显交叠）
-                    - "a attached to b" / "b attached to a"
-                    - "a hanging on b" / "b hanging on a"
-                    - "a leaning on b" / "b leaning on a"
-                    - "none of these"（若以上都不适用）
+                        任务：基于三维空间位置(bbox_center与bbox_extent)以及对象语义(summary、object_tag、object_attitude)，判断两者之间最合理的关系。
+                        可选关系（严格按如下原文之一）：
+                        - "a on b" / "b on a"
+                        - "a in b" / "b in a"
+                        - "a above b" / "b above a"
+                        - "a below b" / "b below a"
+                        - "a left of b" / "b left of a"
+                        - "a right of b" / "b right of a"
+                        - "a in front of b" / "b in front of a"
+                        - "a behind b" / "b behind a"
+                        - "a near b" / "b near a"
+                        - "a overlapping b" / "b overlapping a"（包围盒有明显交叠）
+                        - "a attached to b" / "b attached to a"
+                        - "a hanging on b" / "b hanging on a"
+                        - "a leaning on b" / "b leaning on a"
+                        - "none of these"（若以上都不适用）
 
-                    判定建议：
-                    - 以z轴中心与高度推断"above/below"；以x轴中心推断"left/right"；以y轴中心推断"in front/behind"；
-                    - 若一个对象的中心位于另一对象包围盒范围内且尺寸关系合理，可判定为"in"或"contains"（统一用"a in b"/"b in a"）；
-                    - 若两者中心距离相对两者尺寸较小，判定为"near"；
-                    - 若两个包围盒有明显交叠，判定为"overlapping"；
-                    - 结合summary与object_attitude判断常见语义关系（如桌面上的杯子→"a on b"，挂钩上的外套→"a hanging on b"）。
+                        判定建议：
+                        - 以z轴中心与高度推断"above/below"；以x轴中心推断"left/right"；以y轴中心推断"in front/behind"；
+                        - 若一个对象的中心位于另一对象包围盒范围内且尺寸关系合理，可判定为"in"或"contains"（统一用"a in b"/"b in a"）；
+                        - 若两者中心距离相对两者尺寸较小，判定为"near"；
+                        - 若两个包围盒有明显交叠，判定为"overlapping"；
+                        - 结合summary与object_attitude判断常见语义关系（如桌面上的杯子→"a on b"，挂钩上的外套→"a hanging on b"）。
 
-                    请先给出"reason"，用一到两句阐明你为何选择该关系（引用关键数值或语义线索），再给出"object_relation"。
-                    输出必须为有效JSON，仅含"reason"与"object_relation"两个字段。
-                    """
+                        请先给出"reason"，用一到两句阐明你为何选择该关系（引用关键数值或语义线索），再给出"object_relation"。
+                        输出必须为有效JSON，仅含"reason"与"object_relation"两个字段。
+                        """
 
                     # 记录开始时间
                     start_time = time.time()

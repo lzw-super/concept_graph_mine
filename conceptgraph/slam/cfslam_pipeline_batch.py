@@ -183,8 +183,13 @@ def main(cfg : DictConfig):
     输入：
       - cfg: Hydra配置对象，包含所有运行参数
     '''
+    cfg.dataset_root = '/home/zhengwu/Desktop/concept-graphs/Datasets/Replica'
+    cfg.dataset_config = '/home/zhengwu/Desktop/concept-graphs/conceptgraph/dataset/dataconfigs/replica/replica.yaml'
+    cfg.scene_id = 'room0' 
+
     # 处理配置对象
-    cfg = process_cfg(cfg)
+    cfg = process_cfg(cfg) 
+    
     
     # 初始化数据集，加载RGB、深度、位姿等数据
     dataset = get_dataset(
@@ -200,8 +205,8 @@ def main(cfg : DictConfig):
         dtype=torch.float,
     )
      
-    # 设置类别颜色文件路径
-    cfg.color_file_name = '/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/gsa_classes_ram_mobilesam_withbg_allclasses'
+    # # 设置类别颜色文件路径   手动传入
+    # cfg.color_file_name = '/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/gsa_classes_ram_mobilesam_withbg_allclasses'
     
     # 创建或加载类别和对应的颜色
     classes, class_colors = create_or_load_colors(cfg, cfg.color_file_name)
@@ -237,8 +242,8 @@ def main(cfg : DictConfig):
             / cfg.scene_id / "objects_all_frames" / f"{cfg.gsa_variant}_{cfg.save_suffix}"
         os.makedirs(save_all_folder, exist_ok=True)
     
-    # 设置检测结果文件夹路径
-    cfg.detection_folder_name = '/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/gsa_detections_ram_mobilesam_withbg_allclasses'
+    # 设置检测结果文件夹路径  手动传入
+    # cfg.detection_folder_name = '/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/gsa_detections_ram_mobilesam_withbg_allclasses'
     
     # 遍历数据集中的每帧
     for idx in trange(len(dataset)):
@@ -304,7 +309,7 @@ def main(cfg : DictConfig):
                     # 如果是该背景类的首次检测，直接添加到字典
                     bg_objects[class_name] = detected_object
                 else:
-                    # 否则将新检测与现有背景对象合并
+                    # 否则将新检测与现有背景对象合并  背景直接按照class_name来融合 不要算融合分数
                     matched_obj = bg_objects[class_name]
                     matched_det = detected_object
                     bg_objects[class_name] = merge_obj2_into_obj1(cfg, matched_obj, matched_det, run_dbscan=False)
@@ -333,8 +338,8 @@ def main(cfg : DictConfig):
             continue
                 
         # 计算空间相似度和视觉相似度
-        spatial_sim = compute_spatial_similarities(cfg, fg_detection_list, objects)
-        visual_sim = compute_visual_similarities(cfg, fg_detection_list, objects)
+        spatial_sim = compute_spatial_similarities(cfg, fg_detection_list, objects) # 可多选
+        visual_sim = compute_visual_similarities(cfg, fg_detection_list, objects) #余弦计算相似度
         # 聚合相似度得到综合相似度
         agg_sim = aggregate_similarities(cfg, spatial_sim, visual_sim)
         
@@ -365,7 +370,7 @@ def main(cfg : DictConfig):
         if cfg.filter_interval > 0 and (idx+1) % cfg.filter_interval == 0:
             objects = filter_objects(cfg, objects)
         if cfg.merge_interval > 0 and (idx+1) % cfg.merge_interval == 0:
-            objects = merge_objects(cfg, objects)
+            objects = merge_objects(cfg, objects)   # 待看
             
         # 保存所有帧的对象（如果启用）
         if cfg.save_objects_all_frames:
@@ -482,7 +487,82 @@ def main(cfg : DictConfig):
                 'class_names': classes,
                 'class_colors': class_colors,
             }, f)
-        
+    # 提取结果数据保存为.ply 
+    # 设置输入文件路径
+    # pcd_save_path = "/home/zhengwu/Desktop/concept-graphs/Datasets/Replica/room0/pcd_saves/full_pcd_ram_withbg_allclasses_overlap_maskconf0.25_simsum1.2_dbscan.1_post.pkl.gz"
+    
+    # 设置输出文件路径
+    ply_path = pcd_save_path.replace(".pkl.gz", ".ply")
+    
+    # print(f"Loading data from {input_path}...")
+    
+    # if not os.path.exists(input_path):
+    #     print(f"Error: File not found at {input_path}")
+    #     return
+
+    # try:
+    #     with gzip.open(input_path, "rb") as f:
+    #         results = pickle.load(f)
+    # except Exception as e:
+    #     print(f"Error loading pickle file: {e}")
+    #     return
+
+    all_points = []
+    all_colors = [] 
+    print(f"saving pcd data to .ply file.")
+
+    # 处理前景对象
+    if 'objects' in results and results['objects'] is not None:
+        print(f"Processing {len(results['objects'])} foreground objects...")
+        for i, obj in enumerate(results['objects']):
+            if 'pcd_np' in obj:
+                points = obj['pcd_np']
+                all_points.append(points)
+                
+                if 'pcd_color_np' in obj:
+                    colors = obj['pcd_color_np']
+                    all_colors.append(colors)
+                else:
+                    # 如果没有颜色，使用默认颜色（例如白色）
+                    all_colors.append(np.ones_like(points) * 0.5)
+            else:
+                print(f"Warning: Object {i} has no point cloud data ('pcd_np')")
+
+    # 处理背景对象
+    if 'bg_objects' in results and results['bg_objects'] is not None:
+        print(f"Processing {len(results['bg_objects'])} background objects...")
+        for i, obj in enumerate(results['bg_objects']):
+            if 'pcd_np' in obj:
+                points = obj['pcd_np']
+                all_points.append(points)
+                
+                if 'pcd_color_np' in obj:
+                    colors = obj['pcd_color_np']
+                    all_colors.append(colors)
+                else:
+                    all_colors.append(np.ones_like(points) * 0.5)
+
+    if not all_points:
+        print("No point cloud data found in the file.")
+        return
+
+    # 合并所有点和颜色
+    print("Concatenating points and colors...")
+    final_points = np.concatenate(all_points, axis=0)
+    final_colors = np.concatenate(all_colors, axis=0)
+
+    print(f"Total points: {final_points.shape[0]}")
+
+    # 创建Open3D点云对象
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(final_points)
+    pcd.colors = o3d.utility.Vector3dVector(final_colors)
+
+    # 保存为PLY文件
+    print(f"Saving point cloud to {ply_path}...")
+    o3d.io.write_point_cloud(ply_path, pcd)
+    print("Done!")
+
     # 保存可视化视频（如果启用）
     if cfg.vis_render:
         # 渲染后处理后的最终帧

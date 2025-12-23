@@ -89,7 +89,7 @@ def create_or_load_colors(cfg, filename="gsa_classes_tag2text"):
             class_colors = json.load(f)
         print("Loaded class colors from ", class_colors_fp)
     else:
-        class_colors = get_classes_colors(classes)
+        class_colors = get_classes_colors(classes)  #按照类id随机生成颜色
         # 将键转换为字符串以符合JSON格式要求
         class_colors = {str(k): v for k, v in class_colors.items()}
         with open(class_colors_fp, "w") as f:
@@ -565,7 +565,7 @@ def merge_objects(cfg, objects: MapObjectList):
     """
     if cfg.merge_overlap_thresh > 0:
         # 计算对象间重叠矩阵
-        overlap_matrix = compute_overlap_matrix(cfg, objects)
+        overlap_matrix = compute_overlap_matrix(cfg, objects)  # 3d iou
         print("Before merging:", len(objects))
         # 合并重叠对象
         objects = merge_overlap_objects(cfg, objects, overlap_matrix)
@@ -739,7 +739,7 @@ def gobs_to_detection_list(
         # 获取全局类别ID
         global_class_id = -1 if class_names is None else class_names.index(class_name)
         
-        # 创建点云并着色
+        # 创建点云并着色 obj_color=None表示使用RGB图的mask来上色
         camera_object_pcd = create_object_pcd(
             depth_array,
             mask,
