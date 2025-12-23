@@ -424,6 +424,7 @@ def extract_node_captions(args):
         os.makedirs(build_out, exist_ok=True)
     # 遍历场景地图中的每个对象
     for idx_obj, obj in tqdm(enumerate(scene_map), total=len(scene_map)): 
+        class_name_list = []
         build_out_idx = os.path.join(build_out, f'{idx_obj:04d}')
         if not os.path.exists(build_out_idx):
             os.makedirs(build_out_idx, exist_ok=True)
@@ -454,7 +455,7 @@ def extract_node_captions(args):
 
         # 处理每个高置信度检测
         for idx_det in tqdm(idx_most_conf): 
-            # if lzw > 7:  # 限制处理的检测数量为8个
+            # if lzw > 1:  # 限制处理的检测数量为8个
             #     continue
                 
             # 打开并转换为RGB图像
@@ -493,6 +494,8 @@ def extract_node_captions(args):
                 low_confidences.append(False)
             image_crop_path = os.path.join(build_out_idx, f'{class_name}_{idx_det:04d}.jpg')
             image_crop.save(image_crop_path)
+
+            class_name_list.append(class_name)
             
             # if getattr(chat, "is_mistral", False):
             #     chat.reset()
@@ -531,11 +534,14 @@ def extract_node_captions(args):
             low_confidences_list.append(low_confidences[-1])
             mask_list.append(mask_crop)  # 添加裁剪后的掩码
             lzw += 1
-            
+        _bbox = obj['bbox']
         # 保存当前对象的描述信息
         caption_dict_list.append(
             {
                 "id": idx_obj,
+                "bbox_extent": _bbox.extent.tolist(),  # 边界框尺寸（长宽高）
+                "bbox_center": _bbox.center.tolist(),  # 边界框中心坐标 
+                'class_name_from_2D' : class_name_list,
                 "captions": captions,
                 "low_confidences": low_confidences,
             }
@@ -629,8 +635,8 @@ def refine_node_captions(args):
         _bbox = scene_map[_i]["bbox"]
         # _bbox = o3d.geometry.OrientedBoundingBox.create_from_points(o3d.utility.Vector3dVector(scene_map[_i]["bbox"]))
         _dict["id"] = _caption["id"]
-        # _dict["bbox_extent"] = np.round(_bbox.extent, 1).tolist()
-        # _dict["bbox_center"] = np.round(_bbox.center, 1).tolist()
+        _dict["bbox_extent"] = _bbox.extent.tolist()
+        _dict["bbox_center"] = _bbox.center.tolist()
         _dict["captions"] = _caption["captions"]
         # _dict["low_confidences"] = _caption["low_confidences"]
         # Convert to printable string
@@ -956,14 +962,14 @@ def build_scenegraph(args):
                         input_dict = {
                             "object1": {
                                 "id": segmentidx1,
-                                "bbox_extent": np.round(_bbox1.extent, 1).tolist(),  # 边界框尺寸（长宽高）
-                                "bbox_center": np.round(_bbox1.center, 1).tolist(),  # 边界框中心坐标
+                                "bbox_extent": _bbox1.extent.tolist(),  # 边界框尺寸（长宽高）
+                                "bbox_center": _bbox1.center.tolist(),  # 边界框中心坐标
                                 "object_tag": object_tags[segmentidx1],  # 对象的文本标签
                             },
                             "object2": {
                                 "id": segmentidx2,
-                                "bbox_extent": np.round(_bbox2.extent, 1).tolist(),  # 同样四舍五入到一位小数
-                                "bbox_center": np.round(_bbox2.center, 1).tolist(),
+                                "bbox_extent": _bbox2.extent.tolist(),  # 同样四舍五入到一位小数
+                                "bbox_center": _bbox2.center.tolist(),
                                 "object_tag": object_tags[segmentidx2],
                             },
                         }
@@ -977,8 +983,8 @@ def build_scenegraph(args):
                         input_dict = {
                             "object1": {
                                 "id": segmentidx1,
-                                "bbox_extent": np.round(_bbox1.extent, 1).tolist(),
-                                "bbox_center": np.round(_bbox1.center, 1).tolist(),
+                                "bbox_extent": _bbox1.extent.tolist(),
+                                "bbox_center": _bbox1.center.tolist(),
                                 "object_tag": object_tags[segmentidx1],
                                 "summary": resp1.get("summary", ""),
                                 "object_attitude": resp1.get("object_attitude", ""),
@@ -987,8 +993,8 @@ def build_scenegraph(args):
                             },
                             "object2": {
                                 "id": segmentidx2,
-                                "bbox_extent": np.round(_bbox2.extent, 1).tolist(),
-                                "bbox_center": np.round(_bbox2.center, 1).tolist(),
+                                "bbox_extent": _bbox2.extent.tolist(),
+                                "bbox_center": _bbox2.center.tolist(),
                                 "object_tag": object_tags[segmentidx2],
                                 "summary": resp2.get("summary", ""),
                                 "object_attitude": resp2.get("object_attitude", ""),
